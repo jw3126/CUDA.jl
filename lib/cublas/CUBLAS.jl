@@ -67,13 +67,6 @@ function math_mode!(handle, mode)
     return
 end
 
-function set_stream(s::CuStream)
-    ctx = context()
-    if haskey(task_local_storage(), (:CUBLAS, ctx))
-        cublasSetStream_v2(handle(), s)
-    end
-end
-
 function handle()
     tid = Threads.threadid()
     if @inbounds thread_handles[tid] === nothing
@@ -87,8 +80,6 @@ function handle()
                 end
             end
 
-            cublasSetStream_v2(handle, CUDA.stream_per_thread())
-
             if version(handle) >= v"11.2"
                 workspace = CuArray{UInt8}(undef, 4*1024*1024)  # TODO: 256-byte aligned
                 cublasSetWorkspace_v2(handle, workspace, sizeof(workspace))
@@ -99,6 +90,8 @@ function handle()
 
             handle
         end
+
+        cublasSetStream_v2(thread_handles[tid], CUDA.stream_per_thread())
     end
     something(@inbounds thread_handles[tid])
 end
@@ -125,6 +118,13 @@ function xt_handle()
         end
     end
     something(@inbounds thread_xt_handles[tid])
+end
+
+function reset_stream()
+    # NOTE: we 'abuse' the thread cache here, as switching streams doesn't invalidate it,
+    #       but we (re-)apply the current stream when populating that cache.
+    tid = Threads.threadid()
+    thread_handles[tid] = nothing
 end
 
 function __init__()
