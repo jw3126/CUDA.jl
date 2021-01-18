@@ -38,11 +38,11 @@ end
 
 """
     launch(f::CuFunction; args...; blocks::CuDim=1, threads::CuDim=1,
-           cooperative=false, shmem=0, stream=CUDA.stream())
+           cooperative=false, shmem=0)
 
 Low-level call to launch a CUDA function `f` on the GPU, using `blocks` and `threads` as
 respectively the grid and block configuration. Dynamic shared memory is allocated according
-to `shmem`, and the kernel is launched on stream `stream`.
+to `shmem`.
 
 Arguments to a kernel should either be bitstype, in which case they will be copied to the
 internal kernel parameter buffer, or a pointer to device memory.
@@ -50,8 +50,7 @@ internal kernel parameter buffer, or a pointer to device memory.
 This is a low-level call, prefer to use [`cudacall`](@ref) instead.
 """
 function launch(f::CuFunction, args::Vararg{Any,N}; blocks::CuDim=1, threads::CuDim=1,
-                cooperative::Bool=false, shmem::Integer=0,
-                stream::CuStream=CUDA.stream()) where {N}
+                cooperative::Bool=false, shmem::Integer=0) where {N}
     blockdim = CuDim3(blocks)
     threaddim = CuDim3(threads)
     (blockdim.x>0 && blockdim.y>0 && blockdim.z>0) ||
@@ -64,12 +63,12 @@ function launch(f::CuFunction, args::Vararg{Any,N}; blocks::CuDim=1, threads::Cu
             cuLaunchCooperativeKernel(f,
                                       blockdim.x, blockdim.y, blockdim.z,
                                       threaddim.x, threaddim.y, threaddim.z,
-                                      shmem, stream, kernelParams)
+                                      shmem, stream(), kernelParams)
         else
             cuLaunchKernel(f,
                            blockdim.x, blockdim.y, blockdim.z,
                            threaddim.x, threaddim.y, threaddim.z,
-                           shmem, stream, kernelParams, C_NULL)
+                           shmem, stream(), kernelParams, C_NULL)
         end
     end
 end
@@ -103,7 +102,7 @@ end
 
 """
     cudacall(f::CuFunction, types, values...; blocks::CuDim, threads::CuDim,
-             cooperative=false, shmem=0, stream=CUDA.stream())
+             cooperative=false, shmem=0)
 
 `ccall`-like interface for launching a CUDA function `f` on a GPU.
 
@@ -144,14 +143,14 @@ end
 
 async_send(data::Ptr{Cvoid}) = ccall(:uv_async_send, Cint, (Ptr{Cvoid},), data)
 
-function launch(f::Base.Callable; stream::CuStream=CUDA.stream())
+function launch(f::Base.Callable)
     cond = Base.AsyncCondition() do async_cond
         f()
         close(async_cond)
     end
 
     callback = @cfunction(async_send, Cint, (Ptr{Cvoid},))
-    cuLaunchHostFunc(stream, callback, cond)
+    cuLaunchHostFunc(stream(), callback, cond)
 end
 
 

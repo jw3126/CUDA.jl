@@ -112,12 +112,6 @@ end
 end
 
 
-@testset "streams" begin
-    s = CuStream()
-    @cuda stream=s dummy()
-end
-
-
 @testset "external kernels" begin
     @eval module KernelModule
         export external_dummy
